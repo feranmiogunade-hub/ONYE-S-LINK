@@ -443,7 +443,7 @@ select.form-input option{background:var(--card)}
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
-const API = '/api';
+const API = 'https://onye-s-link.onrender.com/api';
 let records = [];
 let currentFilter = '';
 let currentRecord = null;
@@ -452,7 +452,7 @@ let searchTimer = null;
 // ─── WebSocket ───────────────────────────────────────────────────────────────
 let socket;
 try {
-  socket = io(window.location.origin);
+  socket = io('https://onye-s-link.onrender.com');
   socket.on('connect', () => setWsStatus(true));
   socket.on('disconnect', () => setWsStatus(false));
   socket.on('phone:created', e => { pushFeed('created', e.record); records.unshift(e.record); renderTable(); loadStats(); });
