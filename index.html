@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CellTrace — Phone Number Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0d12;--surface:#111520;--card:#161c2d;--border:#1e2840;
+  --accent:#00e5ff;--accent2:#7c3aed;--warn:#f59e0b;--danger:#ef4444;--success:#10b981;
+  --txt:#e2e8f0;--txt2:#8892a4;--txt3:#4a5568;
+  --font:'DM Sans',sans-serif;--mono:'Space Mono',monospace;
+}
+body{background:var(--bg);color:var(--txt);font-family:var(--font);min-height:100vh;overflow-x:hidden}
+
+/* ── Layout ── */
+.shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:0;display:flex;flex-direction:column}
+.main{display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Sidebar ── */
+.logo{padding:28px 24px 20px;border-bottom:1px solid var(--border)}
+.logo-mark{font-family:var(--mono);font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase}
+.logo-sub{font-size:11px;color:var(--txt3);margin-top:4px;letter-spacing:1px}
+.nav{padding:16px 12px;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--txt2);transition:all .15s;margin-bottom:2px;border:1px solid transparent}
+.nav-item:hover{background:rgba(0,229,255,.06);color:var(--txt)}
+.nav-item.active{background:rgba(0,229,255,.1);color:var(--accent);border-color:rgba(0,229,255,.2)}
+.nav-icon{width:16px;height:16px;flex-shrink:0}
+.nav-badge{margin-left:auto;background:var(--accent2);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;font-family:var(--mono)}
+.sidebar-footer{padding:16px;border-top:1px solid var(--border)}
+.ws-status{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt3)}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--txt3);transition:background .3s}
+.ws-dot.live{background:var(--success);box-shadow:0 0 8px var(--success)}
+
+/* ── Topbar ── */
+.topbar{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
+.search-wrap{flex:1;position:relative}
+.search-wrap input{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 12px 9px 36px;color:var(--txt);font-size:13px;font-family:var(--font);outline:none;transition:border .15s}
+.search-wrap input:focus{border-color:rgba(0,229,255,.4)}
+.search-wrap input::placeholder{color:var(--txt3)}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--txt3);width:14px}
+.btn{padding:9px 16px;border-radius:8px;font-size:13px;font-family:var(--font);cursor:pointer;border:none;font-weight:500;transition:all .15s}
+.btn-primary{background:var(--accent);color:#000}
+.btn-primary:hover{background:#00c4d9}
+.btn-ghost{background:transparent;color:var(--txt2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--card);color:var(--txt)}
+.btn-danger{background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* ── Stats bar ── */
+.stats-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border)}
+.stat-card{background:var(--surface);padding:14px 20px}
+.stat-label{font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px;font-family:var(--mono)}
+.stat-num{font-size:24px;font-weight:600;margin-top:4px;font-family:var(--mono)}
+.stat-num.c-cyan{color:var(--accent)}
+.stat-num.c-green{color:var(--success)}
+.stat-num.c-amber{color:var(--warn)}
+.stat-num.c-red{color:var(--danger)}
+.stat-num.c-purple{color:#a78bfa}
+
+/* ── Content ── */
+.content{flex:1;padding:24px;overflow-y:auto}
+.page{display:none}
+.page.active{display:block}
+
+/* ── Table ── */
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:16px}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{padding:10px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--txt3);border-bottom:1px solid var(--border);font-family:var(--mono);font-weight:400}
+.tbl td{padding:12px 14px;font-size:13px;border-bottom:1px solid rgba(30,40,64,.6)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(0,229,255,.02)}
+.tbl tr{cursor:pointer;transition:background .1s}
+.phone-num{font-family:var(--mono);color:var(--accent);font-size:12px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.badge-active{background:rgba(16,185,129,.15);color:var(--success);border:1px solid rgba(16,185,129,.3)}
+.badge-inactive{background:rgba(74,85,104,.2);color:var(--txt3);border:1px solid var(--border)}
+.badge-flagged{background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.3)}
+.badge-blocked{background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
+.badge-mobile{background:rgba(124,58,237,.12);color:#a78bfa;border:1px solid rgba(124,58,237,.3)}
+.badge-landline{background:rgba(0,229,255,.08);color:var(--accent);border:1px solid rgba(0,229,255,.2)}
+.badge-voip{background:rgba(245,158,11,.1);color:var(--warn);border:1px solid rgba(245,158,11,.25)}
+
+.empty{text-align:center;padding:60px 20px;color:var(--txt3);font-size:13px}
+.empty .icon{font-size:40px;margin-bottom:12px}
+
+/* ── Modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:14px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.modal-head{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-title{font-family:var(--mono);font-size:13px;color:var(--accent);text-transform:uppercase;letter-spacing:2px}
+.modal-close{background:none;border:none;color:var(--txt3);cursor:pointer;font-size:18px;padding:2px}
+.modal-body{padding:24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+
+.form-group{margin-bottom:16px}
+.form-label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--txt3);font-family:var(--mono);margin-bottom:6px;display:block}
+.form-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--txt);font-size:13px;font-family:var(--font);outline:none;transition:border .15s}
+.form-input:focus{border-color:rgba(0,229,255,.5)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+select.form-input option{background:var(--card)}
+
+/* ── Activity feed ── */
+.feed{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.feed-head{padding:14px 16px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--txt3);font-family:var(--mono);display:flex;justify-content:space-between;align-items:center}
+.feed-live{display:flex;align-items:center;gap:6px;color:var(--success);font-size:10px}
+.feed-dot{width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+.feed-list{max-height:280px;overflow-y:auto}
+.feed-item{display:flex;gap:12px;padding:10px 16px;border-bottom:1px solid rgba(30,40,64,.5);font-size:12px;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.feed-item:last-child{border-bottom:none}
+.feed-evt{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.feed-txt{flex:1;color:var(--txt2)}
+.feed-txt strong{color:var(--txt);font-weight:500}
+.feed-time{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap}
+
+/* ── Detail panel ── */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.detail-field{background:var(--surface);border-radius:8px;padding:12px 14px}
+.detail-field label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--txt3);font-family:var(--mono)}
+.detail-field p{font-size:13px;margin-top:4px;color:var(--txt)}
+
+/* ── Filter pills ── */
+.filter-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.pill{padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid var(--border);color:var(--txt2);background:transparent;font-family:var(--font);transition:all .15s}
+.pill:hover,.pill.active{background:rgba(0,229,255,.1);border-color:rgba(0,229,255,.3);color:var(--accent)}
+
+/* ── Toast ── */
+.toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:200}
+.toast{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:12px;display:flex;align-items:center;gap:10px;min-width:240px;animation:slideIn .3s ease}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+.toast-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ── Map placeholder ── */
+.map-placeholder{background:var(--card);border:1px solid var(--border);border-radius:12px;height:320px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--txt3);font-size:13px;margin-top:16px;position:relative;overflow:hidden}
+.map-grid{position:absolute;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:40px 40px;opacity:.5}
+.map-pin{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.map-ring{width:8px;height:8px;border-radius:50%;border:1px solid var(--accent);position:absolute;animation:ring 2s infinite;opacity:.5}
+@keyframes ring{0%{transform:scale(1);opacity:.5}100%{transform:scale(3);opacity:0}}
+
+/* ── Section title ── */
+.section-title{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--txt3);margin-bottom:14px}
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+
+@media(max-width:768px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">CellTrace</div>
+      <div class="logo-sub">Phone Intelligence</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-item active" onclick="navigate('dashboard')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h7"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="navigate('records')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5h18M3 10h18M3 15h18M3 20h10"/></svg>
+        All Records
+        <span class="nav-badge" id="nav-count">0</span>
+      </div>
+      <div class="nav-item" onclick="navigate('map')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Location Map
+      </div>
+      <div class="nav-item" onclick="navigate('watchlist')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        Watchlist
+      </div>
+      <div class="nav-item" onclick="navigate('activity')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Live Activity
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="ws-status">
+        <div class="ws-dot" id="ws-dot"></div>
+        <span id="ws-label">Connecting…</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="search-wrap">
+        <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <input type="text" id="search-input" placeholder="Search phone, label, location…" oninput="onSearch(this.value)"/>
+      </div>
+      <button class="btn btn-primary" onclick="openModal()">+ Add Record</button>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <div class="stat-card"><div class="stat-label">Total</div><div class="stat-num c-cyan" id="s-total">0</div></div>
+      <div class="stat-card"><div class="stat-label">Active</div><div class="stat-num c-green" id="s-active">0</div></div>
+      <div class="stat-card"><div class="stat-label">Flagged</div><div class="stat-num c-amber" id="s-flagged">0</div></div>
+      <div class="stat-card"><div class="stat-label">Blocked</div><div class="stat-num c-red" id="s-blocked">0</div></div>
+      <div class="stat-card"><div class="stat-label">Mobile</div><div class="stat-num c-purple" id="s-mobile">0</div></div>
+    </div>
+
+    <!-- Content pages -->
+    <div class="content">
+
+      <!-- Dashboard -->
+      <div class="page active" id="page-dashboard">
+        <div class="page-header">
+          <div class="section-title">Overview</div>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Label</th><th>Phone Number</th><th>Country</th><th>Carrier</th>
+              <th>Type</th><th>Status</th><th>Location</th>
+            </tr></thead>
+            <tbody id="dash-tbody"></tbody>
+          </table>
+        </div>
+        <br/>
+        <div class="section-title">Live Activity Feed</div>
+        <div class="feed">
+          <div class="feed-head">
+            Real-time Events
+            <div class="feed-live"><div class="feed-dot"></div>LIVE</div>
+          </div>
+          <div class="feed-list" id="feed-list">
+            <div class="empty"><div>No events yet</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Records -->
+      <div class="page" id="page-records">
+        <div class="page-header">
+          <div class="section-title">All Phone Records</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadRecords()">↻ Refresh</button>
+        </div>
+        <div class="filter-bar">
+          <button class="pill active" onclick="setFilter('')">All</button>
+          <button class="pill" onclick="setFilter('active')">Active</button>
+          <button class="pill" onclick="setFilter('flagged')">Flagged</button>
+          <button class="pill" onclick="setFilter('inactive')">Inactive</button>
+          <button class="pill" onclick="setFilter('blocked')">Blocked</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Label</th><th>Phone Number</th><th>Country</th><th>Carrier</th>
+              <th>Type</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="records-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Map -->
+      <div class="page" id="page-map">
+        <div class="section-title">Location Map</div>
+        <div class="map-placeholder">
+          <div class="map-grid"></div>
+          <div id="map-pins"></div>
+          <div style="position:relative;text-align:center">
+            <div style="font-size:32px;margin-bottom:8px">📡</div>
+            <div style="color:var(--txt2);font-size:13px">Geo-visualisation of tracked numbers</div>
+            <div style="color:var(--txt3);font-size:11px;margin-top:6px;font-family:var(--mono)">Integrate Google Maps / Mapbox with API key</div>
+          </div>
+        </div>
+        <div class="table-wrap" style="margin-top:16px">
+          <table class="tbl">
+            <thead><tr><th>Label</th><th>Phone</th><th>Location</th><th>Coordinates</th><th>Status</th></tr></thead>
+            <tbody id="map-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Watchlist -->
+      <div class="page" id="page-watchlist">
+        <div class="page-header">
+          <div class="section-title">Watchlist</div>
+          <button class="btn btn-primary btn-sm" onclick="openWatchlistModal()">+ Add to Watchlist</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Phone Number</th><th>Reason</th><th>Alert Email</th><th>Added</th></tr></thead>
+            <tbody id="wl-tbody"><tr><td colspan="4" class="empty">No numbers on watchlist</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Activity -->
+      <div class="page" id="page-activity">
+        <div class="section-title">Live Activity Log</div>
+        <div class="feed">
+          <div class="feed-head">
+            All Events
+            <div class="feed-live"><div class="feed-dot"></div>LIVE</div>
+          </div>
+          <div class="feed-list" id="activity-list" style="max-height:60vh">
+            <div class="empty"><div>Waiting for events…</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Record Modal ── -->
+<div class="modal-bg" id="add-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Add Phone Record</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Label / Name</label>
+        <input class="form-input" id="f-label" placeholder="e.g. Customer – John Doe"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone Number *</label>
+        <input class="form-input" id="f-phone" placeholder="+234 801 234 5678"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Country</label>
+          <input class="form-input" id="f-country" placeholder="Nigeria"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Carrier</label>
+          <input class="form-input" id="f-carrier" placeholder="MTN"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Line Type</label>
+          <select class="form-input" id="f-line_type">
+            <option value="mobile">Mobile</option>
+            <option value="landline">Landline</option>
+            <option value="voip">VoIP</option>
+            <option value="toll_free">Toll Free</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-input" id="f-status">
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="flagged">Flagged</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input class="form-input" id="f-location" placeholder="Lagos, Nigeria"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Latitude</label>
+          <input class="form-input" id="f-lat" placeholder="6.5244" type="number" step="any"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Longitude</label>
+          <input class="form-input" id="f-lng" placeholder="3.3792" type="number" step="any"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-input" id="f-notes" rows="2" placeholder="Optional notes…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRecord()">Save Record</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Watchlist Modal ── -->
+<div class="modal-bg" id="wl-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Add to Watchlist</span>
+      <button class="modal-close" onclick="closeWlModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Phone Number *</label>
+        <input class="form-input" id="wl-phone" placeholder="+234…"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reason</label>
+        <input class="form-input" id="wl-reason" placeholder="Suspected fraud, spam…"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Alert Email</label>
+        <input class="form-input" id="wl-email" placeholder="alerts@company.com" type="email"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeWlModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWatchlist()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Detail Modal ── -->
+<div class="modal-bg" id="detail-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title" id="detail-title">Record Detail</span>
+      <button class="modal-close" onclick="closeDetailModal()">✕</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" onclick="deleteRecord()">Delete</button>
+      <button class="btn btn-ghost" onclick="closeDetailModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toasts ── -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+const API = '/api';
+let records = [];
+let currentFilter = '';
+let currentRecord = null;
+let searchTimer = null;
+
+// ─── WebSocket ───────────────────────────────────────────────────────────────
+let socket;
+try {
+  socket = io(window.location.origin);
+  socket.on('connect', () => setWsStatus(true));
+  socket.on('disconnect', () => setWsStatus(false));
+  socket.on('phone:created', e => { pushFeed('created', e.record); records.unshift(e.record); renderTable(); loadStats(); });
+  socket.on('phone:updated', e => { const i = records.findIndex(r=>r.id===e.record.id); if(i>-1) records[i]=e.record; pushFeed('updated',e.record); renderTable(); loadStats(); });
+  socket.on('phone:deleted', e => { records = records.filter(r=>r.id!==e.id); pushFeed('deleted',{phone:e.phone}); renderTable(); loadStats(); });
+  socket.on('watchlist:added', e => { pushFeed('watchlist',e.entry); loadWatchlist(); });
+} catch(_) { setWsStatus(false); }
+
+function setWsStatus(on) {
+  document.getElementById('ws-dot').className = 'ws-dot'+(on?' live':'');
+  document.getElementById('ws-label').textContent = on ? 'Live connection' : 'Offline mode';
+}
+
+// ─── Navigation ──────────────────────────────────────────────────────────────
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if(page==='records') loadRecords();
+  if(page==='watchlist') loadWatchlist();
+  if(page==='map') renderMapTable();
+}
+
+// ─── Data fetch ───────────────────────────────────────────────────────────────
+async function apiFetch(path, opts={}) {
+  try {
+    const r = await fetch(API+path, opts);
+    return await r.json();
+  } catch(e) {
+    return null;
+  }
+}
+
+async function loadAll() {
+  const res = await apiFetch('/phones');
+  if(res?.data) {
+    records = res.data;
+    renderTable();
+    document.getElementById('nav-count').textContent = records.length;
+  } else {
+    // Offline mode — use seed data
+    records = getSeedData();
+    renderTable();
+    document.getElementById('nav-count').textContent = records.length;
+  }
+  loadStats();
+}
+
+async function loadStats() {
+  const res = await apiFetch('/stats');
+  if(res?.data) {
+    const d = res.data;
+    document.getElementById('s-total').textContent   = d.total   || 0;
+    document.getElementById('s-active').textContent  = d.active  || 0;
+    document.getElementById('s-flagged').textContent = d.flagged || 0;
+    document.getElementById('s-blocked').textContent = d.blocked || 0;
+    document.getElementById('s-mobile').textContent  = d.mobile  || 0;
+  } else {
+    // Compute from local records
+    document.getElementById('s-total').textContent   = records.length;
+    document.getElementById('s-active').textContent  = records.filter(r=>r.status==='active').length;
+    document.getElementById('s-flagged').textContent = records.filter(r=>r.status==='flagged').length;
+    document.getElementById('s-blocked').textContent = records.filter(r=>r.status==='blocked').length;
+    document.getElementById('s-mobile').textContent  = records.filter(r=>r.line_type==='mobile').length;
+  }
+}
+
+async function loadRecords() { await loadAll(); renderTable(); }
+async function loadWatchlist() {
+  const res = await apiFetch('/watchlist');
+  const tbody = document.getElementById('wl-tbody');
+  if(!res?.data || !res.data.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No numbers on watchlist</td></tr>'; return;
+  }
+  tbody.innerHTML = res.data.map(w=>`
+    <tr>
+      <td class="phone-num">${w.phone}</td>
+      <td>${w.reason||'—'}</td>
+      <td>${w.alert_email||'—'}</td>
+      <td style="color:var(--txt3);font-size:11px;font-family:var(--mono)">${new Date(w.created_at).toLocaleDateString()}</td>
+    </tr>`).join('');
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderTable() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  let data = records;
+  if(currentFilter) data = data.filter(r=>r.status===currentFilter);
+  if(q) data = data.filter(r=>(r.phone+r.label+r.location+r.country+r.carrier).toLowerCase().includes(q));
+
+  const dashRow = r => `
+    <tr onclick="viewRecord('${r.id}')">
+      <td>${r.label||'<span style="color:var(--txt3)">—</span>'}</td>
+      <td class="phone-num">${r.phone}</td>
+      <td>${r.country||'—'}</td>
+      <td>${r.carrier||'—'}</td>
+      <td>${typeBadge(r.line_type)}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td style="color:var(--txt3);font-size:12px">${r.location||'—'}</td>
+    </tr>`;
+  const recRow = r => `
+    <tr onclick="viewRecord('${r.id}')">
+      <td>${r.label||'<span style="color:var(--txt3)">—</span>'}</td>
+      <td class="phone-num">${r.phone}</td>
+      <td>${r.country||'—'}</td>
+      <td>${r.carrier||'—'}</td>
+      <td>${typeBadge(r.line_type)}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();quickFlag('${r.id}')">Flag</button>
+      </td>
+    </tr>`;
+
+  const empty = '<tr><td colspan="7" class="empty"><div class="icon">📋</div>No records found</td></tr>';
+  document.getElementById('dash-tbody').innerHTML    = data.length ? data.slice(0,10).map(dashRow).join('') : empty;
+  document.getElementById('records-tbody').innerHTML = data.length ? data.map(recRow).join('') : empty;
+
+  document.getElementById('nav-count').textContent = records.length;
+}
+
+function renderMapTable() {
+  const tbody = document.getElementById('map-tbody');
+  const geo = records.filter(r=>r.latitude&&r.longitude);
+  if(!geo.length) { tbody.innerHTML='<tr><td colspan="5" class="empty">No geo data</td></tr>'; return; }
+  tbody.innerHTML = geo.map(r=>`
+    <tr>
+      <td>${r.label||'—'}</td>
+      <td class="phone-num">${r.phone}</td>
+      <td>${r.location||'—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--txt3)">${r.latitude}, ${r.longitude}</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`).join('');
+}
+
+function statusBadge(s) {
+  const map={active:'badge-active',inactive:'badge-inactive',flagged:'badge-flagged',blocked:'badge-blocked'};
+  return `<span class="badge ${map[s]||'badge-inactive'}">${s||'unknown'}</span>`;
+}
+function typeBadge(t) {
+  const map={mobile:'badge-mobile',landline:'badge-landline',voip:'badge-voip'};
+  return `<span class="badge ${map[t]||'badge-inactive'}">${t||'—'}</span>`;
+}
+
+// ─── Filter / search ──────────────────────────────────────────────────────────
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  renderTable();
+}
+function onSearch(v) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(renderTable, 200);
+}
+
+// ─── CRUD ─────────────────────────────────────────────────────────────────────
+function openModal() { document.getElementById('add-modal').classList.add('open'); }
+function closeModal(){ document.getElementById('add-modal').classList.remove('open'); }
+
+async function saveRecord() {
+  const phone = document.getElementById('f-phone').value.trim();
+  if(!phone) { toast('Phone number is required','danger'); return; }
+  const body = {
+    label:     document.getElementById('f-label').value,
+    phone,
+    country:   document.getElementById('f-country').value,
+    carrier:   document.getElementById('f-carrier').value,
+    line_type: document.getElementById('f-line_type').value,
+    status:    document.getElementById('f-status').value,
+    location:  document.getElementById('f-location').value,
+    latitude:  parseFloat(document.getElementById('f-lat').value)||null,
+    longitude: parseFloat(document.getElementById('f-lng').value)||null,
+    notes:     document.getElementById('f-notes').value,
+  };
+
+  const res = await apiFetch('/phones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(res?.data) {
+    toast('Record added','success');
+    closeModal();
+    records.unshift(res.data);
+    renderTable();
+    loadStats();
+    pushFeed('created', res.data);
+  } else {
+    // Offline mode — add locally
+    const local = {...body, id: 'local-'+Date.now(), created_at: new Date().toISOString()};
+    records.unshift(local);
+    renderTable();
+    loadStats();
+    toast('Saved locally (API offline)','warn');
+    closeModal();
+    pushFeed('created', local);
+  }
+}
+
+function viewRecord(id) {
+  currentRecord = records.find(r=>r.id===id);
+  if(!currentRecord) return;
+  document.getElementById('detail-title').textContent = currentRecord.phone;
+  document.getElementById('detail-body').innerHTML = `
+    <div class="detail-grid">
+      ${field('Label', currentRecord.label||'—')}
+      ${field('Phone', `<span class="phone-num">${currentRecord.phone}</span>`)}
+      ${field('Country', currentRecord.country||'—')}
+      ${field('Carrier', currentRecord.carrier||'—')}
+      ${field('Line Type', typeBadge(currentRecord.line_type))}
+      ${field('Status', statusBadge(currentRecord.status))}
+      ${field('Location', currentRecord.location||'—')}
+      ${field('Coordinates', currentRecord.latitude ? `${currentRecord.latitude}, ${currentRecord.longitude}` : '—')}
+    </div>
+    ${currentRecord.notes?`<div style="background:var(--surface);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--txt2)">${currentRecord.notes}</div>`:''}
+    <div style="margin-top:12px;font-size:11px;color:var(--txt3);font-family:var(--mono)">
+      Added ${new Date(currentRecord.created_at).toLocaleString()}
+    </div>`;
+  document.getElementById('detail-modal').classList.add('open');
+}
+function field(label,val){return`<div class="detail-field"><label>${label}</label><p>${val}</p></div>`;}
+function closeDetailModal(){ document.getElementById('detail-modal').classList.remove('open'); currentRecord=null; }
+
+async function deleteRecord() {
+  if(!currentRecord) return;
+  if(!confirm(`Delete ${currentRecord.phone}?`)) return;
+  const res = await apiFetch('/phones/'+currentRecord.id, {method:'DELETE'});
+  records = records.filter(r=>r.id!==currentRecord.id);
+  renderTable(); loadStats(); closeDetailModal();
+  toast('Record deleted','danger');
+}
+
+async function quickFlag(id) {
+  const r = records.find(x=>x.id===id);
+  if(!r) return;
+  const ns = r.status==='flagged'?'active':'flagged';
+  const res = await apiFetch('/phones/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:ns})});
+  if(res?.data) { const i=records.findIndex(x=>x.id===id); records[i]=res.data; }
+  else { const i=records.findIndex(x=>x.id===id); if(i>-1) records[i].status=ns; }
+  renderTable(); toast(`Marked ${ns}`,'warn');
+}
+
+// ─── Watchlist ────────────────────────────────────────────────────────────────
+function openWatchlistModal(){ document.getElementById('wl-modal').classList.add('open'); }
+function closeWlModal(){ document.getElementById('wl-modal').classList.remove('open'); }
+async function saveWatchlist() {
+  const phone = document.getElementById('wl-phone').value.trim();
+  if(!phone) { toast('Phone is required','danger'); return; }
+  const body = { phone, reason: document.getElementById('wl-reason').value, alert_email: document.getElementById('wl-email').value };
+  const res = await apiFetch('/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  toast('Added to watchlist','success');
+  closeWlModal();
+  loadWatchlist();
+  pushFeed('watchlist', {phone});
+}
+
+// ─── Feed ─────────────────────────────────────────────────────────────────────
+const evtColors = {created:getComputedStyle(document.body).getPropertyValue('--success'),updated:'#7c3aed',deleted:getComputedStyle(document.body).getPropertyValue('--danger'),watchlist:getComputedStyle(document.body).getPropertyValue('--warn')};
+function pushFeed(type, data) {
+  const msg = {
+    created:`<strong>${data.phone}</strong> added as <em>${data.label||'unlabelled'}</em>`,
+    updated:`<strong>${data.phone}</strong> record updated`,
+    deleted:`<strong>${data.phone}</strong> deleted`,
+    watchlist:`<strong>${data.phone}</strong> added to watchlist`,
+  }[type] || 'Event';
+  const color = {created:'#10b981',updated:'#7c3aed',deleted:'#ef4444',watchlist:'#f59e0b'}[type]||'#8892a4';
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.innerHTML = `<div class="feed-evt" style="background:${color}"></div><div class="feed-txt">${msg}</div><div class="feed-time">${new Date().toLocaleTimeString()}</div>`;
+  ['feed-list','activity-list'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.querySelector('.empty')) el.innerHTML='';
+    el.prepend(item.cloneNode(true));
+    if(el.children.length>50) el.removeChild(el.lastChild);
+  });
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const colors = {success:'var(--success)',danger:'var(--danger)',warn:'var(--warn)',info:'var(--accent)'};
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<div class="toast-dot" style="background:${colors[type]||colors.info}"></div>${msg}`;
+  document.getElementById('toast-wrap').prepend(t);
+  setTimeout(()=>t.remove(), 3500);
+}
+
+// ─── Seed data (offline fallback) ────────────────────────────────────────────
+function getSeedData() {
+  return [
+    {id:'1',label:'Sales Lead – John',phone:'+2348012345678',country:'Nigeria',carrier:'MTN',line_type:'mobile',status:'active',location:'Lagos, Nigeria',latitude:6.5244,longitude:3.3792,created_at:new Date().toISOString()},
+    {id:'2',label:'Support – Acme',phone:'+14155552671',country:'USA',carrier:'AT&T',line_type:'mobile',status:'active',location:'San Francisco, CA',latitude:37.7749,longitude:-122.4194,created_at:new Date().toISOString()},
+    {id:'3',label:'Unknown Caller',phone:'+447911123456',country:'UK',carrier:'Vodafone',line_type:'mobile',status:'flagged',location:'London, UK',latitude:51.5074,longitude:-0.1278,created_at:new Date().toISOString()},
+    {id:'4',label:'Office Landline',phone:'+35312345678',country:'Ireland',carrier:'Eircom',line_type:'landline',status:'inactive',location:'Dublin, Ireland',latitude:53.3498,longitude:-6.2603,created_at:new Date().toISOString()},
+  ];
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+loadAll();
+// Simulate some initial feed activity
+setTimeout(()=>pushFeed('created',{phone:'+2348012345678',label:'Sales Lead – John'}),800);
+setTimeout(()=>pushFeed('updated',{phone:'+14155552671'}),2000);
+</script>
+</body>
+</html>
